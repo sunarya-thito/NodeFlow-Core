@@ -9,9 +9,9 @@ import 'theme/compact_data.dart';
 
 class CompactUI extends StatefulWidget {
   final ThemeMode mode;
-  final RouterConfig<Object> routerConfig;
+  final Widget child;
 
-  const CompactUI({Key? key, required this.mode, required this.routerConfig}) : super(key: key);
+  const CompactUI({Key? key, required this.mode, required this.child}) : super(key: key);
 
   @override
   CompactUIState createState() => CompactUIState();
@@ -82,10 +82,9 @@ class CompactUIState extends State<CompactUI> {
                 ),
                 child: Container(
                   color: CompactData.of(context).theme.backgroundColor,
-                  child: MaterialApp.router(
+                  child: MaterialApp(
                     title: 'NodeFlow',
                     debugShowCheckedModeBanner: false,
-                    routerConfig: widget.routerConfig,
                     supportedLocales: const [
                       Locale('en', 'US'),
                     ],
@@ -95,6 +94,10 @@ class CompactUIState extends State<CompactUI> {
                       GlobalWidgetsLocalizations.delegate,
                       GlobalCupertinoLocalizations.delegate,
                     ],
+                    builder: (context, child) {
+                      return Directionality(textDirection: TextDirection.ltr, child: child ?? Container());
+                    },
+                    home: widget.child,
                     theme: ThemeData(
                       fontFamily: 'Inter',
                       visualDensity: VisualDensity.compact,
@@ -115,6 +118,7 @@ class CompactUIState extends State<CompactUI> {
                         linearTrackColor: CompactData.of(context).theme.progressBarTrackColor,
                         color: CompactData.of(context).theme.progressBarValueColor,
                       ),
+                      hintColor: CompactData.of(context).theme.tertiaryTextColor,
                       menuBarTheme: const MenuBarThemeData(
                         style: MenuStyle(
                           shape: MaterialStatePropertyAll(
@@ -149,6 +153,46 @@ class CompactUIState extends State<CompactUI> {
                         mainAxisMargin: 0,
                         thickness: MaterialStateProperty.all(8),
                       ),
+                      listTileTheme: ListTileThemeData(
+                        iconColor: CompactData.of(context).theme.secondaryTextColor,
+                        dense: true,
+                      ),
+                      checkboxTheme: CheckboxThemeData(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        checkColor: MaterialStateProperty.resolveWith(
+                          (states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return CompactData.of(context).theme.primaryTextColor;
+                            }
+                            return CompactData.of(context).theme.secondaryTextColor;
+                          },
+                        ),
+                        fillColor: MaterialStateProperty.resolveWith(
+                          (states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return CompactData.of(context).theme.focusedSurfaceColor;
+                            }
+                            return Colors.transparent;
+                          },
+                        ),
+                        side: BorderSide(
+                          color: CompactData.of(context).theme.secondaryTextColor,
+                          width: 2,
+                        ),
+                      ),
+                      radioTheme: RadioThemeData(
+                        fillColor: MaterialStateProperty.resolveWith(
+                          (states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return CompactData.of(context).theme.focusedSurfaceColor;
+                            }
+                            return CompactData.of(context).theme.secondaryTextColor;
+                          },
+                        ),
+                      ),
+                      disabledColor: CompactData.of(context).theme.dividerColor,
                       menuButtonTheme: MenuButtonThemeData(
                         style: ButtonStyle(
                           splashFactory: NoSplash.splashFactory,
@@ -218,6 +262,8 @@ class CompactUIState extends State<CompactUI> {
                           ),
                         ),
                       ),
+                      focusColor: CompactData.of(context).theme.hoveredSurfaceColor,
+                      canvasColor: CompactData.of(context).theme.surfaceColor,
                       dropdownMenuTheme: DropdownMenuThemeData(
                         textStyle: TextStyle(
                           fontFamily: 'Inter',
@@ -283,14 +329,34 @@ class CompactUIState extends State<CompactUI> {
                           elevation: MaterialStatePropertyAll(
                             0,
                           ),
-                          shape: MaterialStatePropertyAll(
-                            RoundedRectangleBorder(
-                              side: BorderSide(
-                                color: CompactData.of(context).theme.focusedSurfaceColor,
-                                width: 1,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                          shape: MaterialStateProperty.resolveWith(
+                            (states) {
+                              if (states.contains(MaterialState.disabled)) {
+                                return RoundedRectangleBorder(
+                                  side: BorderSide(
+                                    color: CompactData.of(context).theme.dividerColor,
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                );
+                              }
+                              if (states.contains(MaterialState.focused)) {
+                                return RoundedRectangleBorder(
+                                  side: BorderSide(
+                                    color: CompactData.of(context).theme.focusedSurfaceColor,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                );
+                              }
+                              return RoundedRectangleBorder(
+                                side: BorderSide(
+                                  color: CompactData.of(context).theme.focusedSurfaceColor,
+                                  width: 1,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -303,11 +369,19 @@ class CompactUIState extends State<CompactUI> {
                             ),
                           ),
                           shadowColor: const MaterialStatePropertyAll(null),
-                          side: MaterialStatePropertyAll(
-                            BorderSide(
-                              color: CompactData.of(context).theme.dividerColor,
-                              width: 1,
-                            ),
+                          side: MaterialStateProperty.resolveWith(
+                            (states) {
+                              if (states.contains(MaterialState.focused)) {
+                                return BorderSide(
+                                  color: CompactData.of(context).theme.focusedSurfaceColor,
+                                  width: 2,
+                                );
+                              }
+                              return BorderSide(
+                                color: CompactData.of(context).theme.dividerColor,
+                                width: 1,
+                              );
+                            },
                           ),
                           shape: MaterialStatePropertyAll(
                             RoundedRectangleBorder(

@@ -24,6 +24,17 @@ extension CompactDataStatefulAccessor on State {
   }
 }
 
+class TextBuilder extends StatelessWidget {
+  final I18nString text;
+
+  const TextBuilder(this.text, {Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text(i18n(context)));
+  }
+}
+
 class CompactData extends InheritedWidget {
   static CompactData of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<CompactData>()!;

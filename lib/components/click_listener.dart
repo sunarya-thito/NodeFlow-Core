@@ -45,7 +45,14 @@ class _ClickListenerState extends State<ClickListener> {
       },
       onSecondaryTap: widget.onRightClick,
       onTertiaryTapDown: (_) => widget.onMiddleClick?.call(),
-      child: widget.child,
+      child: FocusableActionDetector(
+        actions: {
+          ActivateIntent: CallbackAction(
+            onInvoke: (_) => widget.onClick?.call(),
+          ),
+        },
+        child: widget.child,
+      ),
     );
   }
 }

@@ -38,9 +38,7 @@ dependencies:
   intl: any
   flutter_localizations:
     sdk: flutter
-  go_router: ^10.0.0
   collection: ^1.17.0
-  adaptive_scrollbar: ^2.1.2
   visibility_detector: ^0.4.0+2
   undo: ^1.4.0
   xml: ^6.3.0
@@ -48,6 +46,10 @@ dependencies:
   archive: ^3.3.7
   crypto: ^3.0.3
   async: ^2.11.0
+  bitsdojo_window: ^0.1.5
+  flutter_markdown: ^0.6.17
+  simple_animations: ^5.0.2
+  adaptive_scrollbar: ^2.1.2
 
 dev_dependencies:
   flutter_test:
@@ -75,6 +77,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - images/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

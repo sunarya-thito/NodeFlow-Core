@@ -493,10 +493,6 @@ bool containsQuery(String text, List<String> query) {
 }
 
 class _I18nTextSearchableWidgetState extends State<I18nTextSearchableWidget> {
-  void _onStringChanged() {
-    setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
     if (widget.searchQuery.isNotEmpty) {

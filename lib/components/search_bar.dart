@@ -1,9 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:nodeflow/components/locale_widget.dart';
+import 'package:nodeflow/components/stream_list_builder.dart';
+import 'package:nodeflow/components/widget_size_reporter.dart';
+import 'package:nodeflow/search.dart';
 import 'package:nodeflow/theme/compact_data.dart';
 
+import 'entry.dart';
 import 'menu/custom_menu_anchor.dart';
 
 class SearchBarWidget extends StatefulWidget {
@@ -14,186 +21,338 @@ class SearchBarWidget extends StatefulWidget {
 }
 
 class _SearchBarWidgetState extends State<SearchBarWidget> {
+  final GlobalKey _anchorKey = GlobalKey();
+  late OverlayEntry _overlayEntry;
+
   TextEditingController controller = TextEditingController();
 
   int suggestionIndex = 0;
   List<String> suggestions = ["test", "hello", "world", "example"];
 
-  void updateIndexSuggestion() {
-    if (suggestions.isEmpty) return;
-    var selection = controller.selection;
-    if (hasSelection) {
-      var currentSuggestion = suggestions[suggestionIndex % suggestions.length];
-      controller.text = controller.text.replaceRange(selection.baseOffset, selection.extentOffset, currentSuggestion);
-      // set the cursor at original position
-      controller.selection = TextSelection(baseOffset: selection.baseOffset, extentOffset: selection.baseOffset + currentSuggestion.length);
-    } else if (selection.isCollapsed && selection.baseOffset == controller.text.length) {
-      // else if cursor at the end of the text
-      var currentSuggestion = suggestions[suggestionIndex % suggestions.length];
-      // if not ends with space, then add space first, also move the cursor forward
-      controller.text += currentSuggestion;
-      controller.selection = TextSelection(baseOffset: selection.baseOffset, extentOffset: selection.baseOffset);
+  final ValueNotifier<double> _widgetWidth = ValueNotifier(0);
+  final ValueNotifier<bool> _visible = ValueNotifier(false);
+
+  final FocusNode focusNode = FocusNode();
+
+  void _show([bool force = false]) {
+    if (_visible.value) {
+      if (!force) return;
     }
+    _visible.value = true;
   }
 
-  void updateSuggestion(String query) {
-    // insert the suggestion after cursor and highlight it with selection
-    // just like the text field in Chrome's URL bar (android)
-    // only suggests if the query is ends with a space
-    if (suggestions.isEmpty) {
-      var selection = controller.selection;
-      if (hasSelection) {
-        // replace selected with empty
-        controller.text = controller.text.replaceRange(selection.baseOffset, selection.extentOffset, '');
-      }
-      return;
-    }
-
-    var cursorPosition = controller.selection.baseOffset;
-    var text = controller.text;
-
-    var suggestion = suggestions[suggestionIndex % suggestions.length];
-
-    // if there is a text selected inside TextField, replace them with the suggestion
-    // else, also if there is no text after the cursor, insert the suggestion at the end
-    // do not insert the suggestion if there is text after the cursor
-    if (controller.selection.isValid && controller.selection.isCollapsed) {
-      var start = controller.selection.start;
-      var end = controller.selection.end;
-      var textBefore = text.substring(0, start);
-      var textAfter = text.substring(end);
-      controller.text = textBefore + suggestion + textAfter;
-      controller.selection = TextSelection(baseOffset: start, extentOffset: start + suggestion.length);
-    } else if (cursorPosition == text.length && controller.selection.isCollapsed) {
-      var textBefore = text.substring(0, cursorPosition);
-      controller.text = textBefore + suggestion;
-      controller.selection = TextSelection(baseOffset: cursorPosition, extentOffset: cursorPosition + suggestion.length);
-    }
-  }
-
-  late FocusNode focusNode;
-
-  bool get hasSelection {
-    var selection = controller.selection;
-    return selection.baseOffset < selection.extentOffset && selection.extentOffset == controller.text.length;
+  void _hide() {
+    if (!_visible.value) return;
+    Search.interrupt();
+    _visible.value = false;
   }
 
   @override
   void initState() {
     super.initState();
-    suggestions.clear();
     // load from asset
-    focusNode = FocusNode(
-      onKey: (node, event) {
-        if (event.logicalKey == LogicalKeyboardKey.tab ||
-            event.logicalKey == LogicalKeyboardKey.arrowUp ||
-            event.logicalKey == LogicalKeyboardKey.arrowDown ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
-          // stop the propagation of the event
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.escape) {
-          if (hasSelection) {
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
+    focusNode.addListener(() {
+      if (focusNode.hasFocus && controller.text.trim().isNotEmpty) {
+        _show(true);
+      }
+    });
+    controller.addListener(() {
+      if (controller.text.trim().isEmpty) {
+        _hide();
+      } else {
+        _show();
+      }
+    });
+    _visible.addListener(() {
+      if (_visible.value && !_overlayEntry.hasOverlay) {
+        Overlay.of(context).insert(_overlayEntry);
+      }
+    });
+    GlobalKey circleKey = GlobalKey();
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        var renderObject = _anchorKey.currentContext!.findRenderObject() as RenderBox;
+        var localToGlobal = renderObject.localToGlobal(Offset(renderObject.paintBounds.left, renderObject.paintBounds.bottom));
+        return Positioned.directional(
+          textDirection: Directionality.of(outerContext),
+          top: localToGlobal.dy + 8,
+          start: localToGlobal.dx,
+          child: InheritedTheme.captureAll(
+            outerContext,
+            TapRegion(
+              groupId: this,
+              onTapOutside: (event) {
+                _hide();
+              },
+              child: ValueListenableBuilder(
+                valueListenable: _widgetWidth,
+                builder: (context, width, child) {
+                  return ValueListenableBuilder(
+                    valueListenable: _visible,
+                    builder: (context, visible, child) {
+                      return Entry(
+                        startSize: Size(width, 0),
+                        endSize: Size(width, 500),
+                        visible: visible,
+                        onEnd: () {
+                          if (!visible) {
+                            _overlayEntry.remove();
+                          }
+                        },
+                        child: child!,
+                      );
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Container(
+                        width: width,
+                        decoration: BoxDecoration(
+                          color: CompactData.of(context).theme.surfaceColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: CompactData.of(context).theme.dividerColor),
+                        ),
+                        child: child!,
+                      ),
+                    ),
+                  );
+                },
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  alignment: Alignment.topCenter,
+                  child: controller.text.trim().isEmpty
+                      ? Container(
+                          height: 0,
+                        )
+                      : FocusTraversalGroup(
+                          child: ValueDelayer(
+                            value: controller.text.trim(),
+                            delay: const Duration(seconds: 1),
+                            builder: (context, value) {
+                              print('searching $value');
+                              return Searcher(
+                                searchContext: Search.of(outerContext),
+                                query: value,
+                                builder: (context, resultStream) {
+                                  return StreamListBuilder(
+                                    stream: resultStream,
+                                    builder: (context, data, hasMore) {
+                                      if (data.isEmpty && !hasMore) {
+                                        return SizedBox(
+                                          height: 40,
+                                          child: Center(
+                                            child: 'No results found'.asTextWidget(),
+                                          ),
+                                        );
+                                      }
+                                      return ListView.separated(
+                                        shrinkWrap: true,
+                                        itemBuilder: (context, index) {
+                                          if (index == data.length) {
+                                            return Container(
+                                              padding: const EdgeInsets.all(12),
+                                              child: Center(
+                                                child: RepaintBoundary(
+                                                  child: CircularProgressIndicator(
+                                                    key: circleKey,
+                                                    color: CompactData.of(context).theme.secondaryTextColor,
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                          return SearchResultWidget(
+                                            result: data[index],
+                                            parentFocusNode: focusNode,
+                                          );
+                                        },
+                                        separatorBuilder: (context, index) {
+                                          return const Divider();
+                                        },
+                                        itemCount: hasMore ? data.length + 1 : data.length,
+                                      );
+                                    },
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        );
       },
     );
   }
 
+  BuildContext get outerContext => context;
+
   @override
   void dispose() {
-    focusNode.dispose();
+    controller.dispose();
     super.dispose();
   }
 
   @override
+  void didUpdateWidget(covariant SearchBarWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    SchedulerBinding.instance.addPostFrameCallback((Duration _) {
+      _overlayEntry.markNeedsBuild();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 300,
-      child: Material(
-        color: app.searchBarColor,
-        borderRadius: BorderRadius.circular(500),
-        child: i18n.dashboardSearch.asBuilderWidget((context, i18n) {
-          return RawKeyboardListener(
-            focusNode: focusNode,
-            onKey: (event) {
-              if (event is RawKeyUpEvent) return;
-              // if pressed backspace, then remove suggestion and remove space at the end
-              if (event.logicalKey == LogicalKeyboardKey.backspace) {
-                var selection = controller.selection;
-                if (hasSelection) {
-                  controller.text = controller.text.replaceRange(selection.baseOffset, selection.extentOffset, '');
-                  // set selection at the end
-                  controller.selection = TextSelection.collapsed(offset: controller.text.length);
-                }
-              } else if (event.logicalKey == LogicalKeyboardKey.enter) {
-                if (hasSelection) {
-                  controller.selection = TextSelection.collapsed(offset: controller.text.length);
-                }
-              } else if (event.logicalKey == LogicalKeyboardKey.escape) {
-                if (hasSelection) {
-                  // remove suggestion
-                  controller.text = controller.text.replaceRange(controller.selection.baseOffset, controller.selection.extentOffset, '');
-                  // set selection at the end
-                  controller.selection = TextSelection.collapsed(offset: controller.text.length);
-                }
-              } else if (event.logicalKey == LogicalKeyboardKey.tab || event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                // stop the propagation of the event
-                suggestionIndex++;
-                updateIndexSuggestion();
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                suggestionIndex--;
-                if (suggestionIndex < 0) {
-                  suggestionIndex = suggestions.length - 1;
-                }
-                updateIndexSuggestion();
-              }
-            },
-            child: TextField(
-              contextMenuBuilder: (context, editableTextState) {
-                return AdaptiveTextSelectionToolbar(children: [
-                  CustomMenuItemButton(
-                    requestFocusOnHover: false,
-                    child: Text("Copy"),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: controller.selection.textInside(controller.text)));
-                    },
+    return TapRegion(
+      key: _anchorKey,
+      groupId: this,
+      child: WidgetSizeReporter(
+        onSizeChanged: (size) {
+          _widgetWidth.value = size.width;
+        },
+        child: SizedBox(
+          width: 300,
+          child: Material(
+            color: app.searchBarColor,
+            borderRadius: BorderRadius.circular(500),
+            child: i18n.dashboardSearch.asBuilderWidget((context, i18n) {
+              return TextField(
+                focusNode: focusNode,
+                contextMenuBuilder: (context, editableTextState) {
+                  return AdaptiveTextSelectionToolbar(anchors: editableTextState.contextMenuAnchors, children: [
+                    CustomMenuItemButton(
+                      requestFocusOnHover: false,
+                      child: Text("Copy"),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: controller.selection.textInside(controller.text)));
+                      },
+                    ),
+                  ]);
+                  return Container(
+                    width: 100,
+                    height: 200,
+                    color: Colors.red,
+                  );
+                },
+                onChanged: (text) {
+                  if (_overlayEntry.hasOverlay) {
+                    _overlayEntry.markNeedsBuild();
+                  }
+                },
+                controller: controller,
+                textAlignVertical: TextAlignVertical.center,
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.only(left: 12, right: 12),
+                  isDense: true,
+                  suffixIcon: const Icon(
+                    CupertinoIcons.search,
+                    size: 16,
                   ),
-                ], anchors: editableTextState.contextMenuAnchors);
-                return Container(
-                  width: 100,
-                  height: 200,
-                  color: Colors.red,
-                );
-              },
-              controller: controller,
-              onChanged: (query) {
-                suggestionIndex = 0;
-                updateSuggestion(query);
-              },
-              textAlignVertical: TextAlignVertical.center,
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.only(left: 12),
-                isDense: true,
-                suffixIcon: const Icon(
-                  CupertinoIcons.search,
-                  size: 16,
+                  border: InputBorder.none,
+                  suffixIconColor: app.secondaryTextColor,
+                  hintText: i18n,
+                  hintStyle: TextStyle(
+                    color: CompactData.of(context).theme.secondaryTextColor,
+                  ),
                 ),
-                border: InputBorder.none,
-                suffixIconColor: app.secondaryTextColor,
-                hintText: i18n,
-                hintStyle: TextStyle(
-                  color: CompactData.of(context).theme.secondaryTextColor,
-                ),
-              ),
-              style: TextStyle(color: CompactData.of(context).theme.primaryTextColor, fontSize: 12),
-              cursorColor: CompactData.of(context).theme.cursorColor,
-              cursorWidth: 1.2,
-            ),
-          );
-        }),
+                style: TextStyle(color: CompactData.of(context).theme.primaryTextColor, fontSize: 12),
+                cursorColor: CompactData.of(context).theme.cursorColor,
+                cursorWidth: 1.2,
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ValueDelayer<T> extends StatefulWidget {
+  final T value;
+  final Duration delay;
+  final Widget Function(BuildContext context, T value) builder;
+
+  const ValueDelayer({Key? key, required this.value, required this.delay, required this.builder}) : super(key: key);
+
+  @override
+  _ValueDelayerState<T> createState() => _ValueDelayerState<T>();
+}
+
+class _ValueDelayerState<T> extends State<ValueDelayer<T>> {
+  late T _value;
+  late T _futureValue;
+  Timer? _delayer;
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.value;
+  }
+
+  @override
+  void didUpdateWidget(covariant ValueDelayer<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      supplyValue(widget.value);
+    }
+  }
+
+  void resetDelay() {
+    _delayer?.cancel();
+    _delayer = Timer(widget.delay, () {
+      if (!mounted) return;
+      setState(() {
+        _value = _futureValue;
+        _delayer = null;
+      });
+    });
+  }
+
+  void supplyValue(T value) {
+    _futureValue = value;
+    resetDelay();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(context, _value);
+  }
+}
+
+class SearchResultWidget extends StatefulWidget {
+  final SearchResult result;
+  final FocusNode parentFocusNode;
+
+  const SearchResultWidget({Key? key, required this.result, required this.parentFocusNode}) : super(key: key);
+
+  @override
+  _SearchResultWidgetState createState() => _SearchResultWidgetState();
+}
+
+class _SearchResultWidgetState extends State<SearchResultWidget> {
+  bool _focused = false;
+  bool _hovered = false;
+  @override
+  Widget build(BuildContext context) {
+    return FocusableActionDetector(
+      parentFocusNode: widget.parentFocusNode,
+      onShowFocusHighlight: (value) {
+        setState(() {
+          _focused = value;
+        });
+      },
+      onShowHoverHighlight: (value) {
+        setState(() {
+          _hovered = value;
+        });
+      },
+      child: Container(
+        color: _focused
+            ? app.focusedSurfaceColor
+            : _hovered
+                ? app.hoveredSurfaceColor
+                : null,
+        child: widget.result.widget,
       ),
     );
   }

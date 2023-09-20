@@ -1,38 +1,72 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nodeflow/i18n.dart';
 
-abstract class TaskAction<T extends Intent> extends Action<T> {
-  @override
-  Future<Object?> invoke(T intent);
+class TaskIntent extends Intent {
+  final I18nString name;
+
+  const TaskIntent(this.name);
 }
 
-abstract class ContextTaskAction<T extends Intent> extends Action<T> {
-  @override
-  Future<Object?> invoke(T intent, [BuildContext? context]);
-}
+abstract class TaskAction<T extends TaskIntent> extends Action<T> {
+  Stream<ProgressData> invokeAction(T intent, BuildContext context);
 
-abstract class ProgressTaskAction<T extends Intent> extends Action<T> {
   @override
-  Stream<ProgressData> invoke(T intent);
-}
-
-abstract class ContextProgressTaskAction<T extends Intent> extends Action<T> {
-  @override
-  Stream<ProgressData> invoke(T intent, [BuildContext? context]);
+  Object invoke(T intent, [BuildContext? context]) {
+    assert(context != null, 'Context is required for TaskAction');
+    return invokeAction(intent, context!);
+  }
 }
 
 class ProgressData {
   final double progress;
-  final String? message;
+  final I18nString? message;
   final Object? data;
   const ProgressData(this.progress, {this.message}) : data = null;
   const ProgressData.complete({this.message, this.data}) : progress = 1;
+  static const ProgressData zero = ProgressData(0);
 }
 
-class TaskManager {}
+class FunctionTaskAction<T extends TaskIntent> extends TaskAction<T> {
+  final Stream<ProgressData> Function(T intent, BuildContext context) function;
 
-class ActiveTask {}
+  FunctionTaskAction(this.function);
 
-class TaskNotification extends Notification {}
+  @override
+  Stream<ProgressData> invokeAction(T intent, BuildContext context) {
+    return function(intent, context);
+  }
+}
+
+class TaskManager extends ValueListenable<List<ActiveTask>> with ChangeNotifier {
+  final List<ActiveTask> _tasks = [];
+
+  @override
+  List<ActiveTask> get value => _tasks;
+
+  void _registerTask(ActiveTask task) {
+    _tasks.add(task);
+    notifyListeners();
+  }
+
+  void _unregisterTask(ActiveTask task) {
+    _tasks.remove(task);
+    notifyListeners();
+  }
+}
+
+class ActiveTask extends ValueNotifier<ProgressData> {
+  ActiveTask(super.value);
+}
+
+abstract class TaskNotification extends Notification {}
+
+class TaskFailedNotification extends TaskNotification {
+  final Object? error;
+  final StackTrace? stackTrace;
+
+  TaskFailedNotification([this.error, this.stackTrace]);
+}
 
 class TaskActionDispatcher extends ActionDispatcher {
   final TaskManager taskManager;
@@ -42,32 +76,21 @@ class TaskActionDispatcher extends ActionDispatcher {
   @override
   Object? invokeAction(covariant Action<Intent> action, covariant Intent intent, [BuildContext? context]) {
     Object? result = super.invokeAction(action, intent, context);
-    if (action is TaskAction) {
-      Future<Object?> resultFuture = result as Future<Object?>;
-      Future<Object?> future = Future(() {
-        // TODO: submit to task queue
-      })
-          .then((_) async {
-        return await resultFuture;
-      }).catchError((err, stackTrace) {
-        // TODO: mark task as failed
-        return Future.error(err, stackTrace);
-      }).then((value) {
-        // TODO: mark task as done
-        return value;
+    if (action is TaskAction && context != null && result is Stream<ProgressData>) {
+      ActiveTask task = ActiveTask(ProgressData.zero);
+      taskManager._registerTask(task);
+      var listen = result.listen((event) {
+        task.value = event;
       });
-      result = future;
-    } else if (action is ProgressTaskAction) {
-      Stream<ProgressData> resultStream = result as Stream<ProgressData>;
-      // convert stream to future
-      // TODO: submit to task queue
-      Future<Object?> future = Future(() async {
-        await for (ProgressData data in resultStream) {
-          // TODO: update task progress
-        }
+      listen.onError((error, stackTrace) {
+        taskManager._unregisterTask(task);
+        TaskFailedNotification(error, stackTrace).dispatch(context);
+        listen.cancel();
       });
-
-      result = future;
+      listen.onDone(() {
+        taskManager._unregisterTask(task);
+        listen.cancel();
+      });
     }
     return result;
   }

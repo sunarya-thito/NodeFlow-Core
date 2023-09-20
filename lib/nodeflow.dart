@@ -1,52 +1,63 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:nodeflow/app_settings.dart';
 import 'package:nodeflow/compact_ui.dart';
-import 'package:nodeflow/pages/editor.dart';
+import 'package:nodeflow/components/dashboard/dashboard.dart';
+import 'package:nodeflow/components/debug/debug_focus_highlighter.dart';
+import 'package:nodeflow/components/state_delivery.dart';
+import 'package:nodeflow/project/project_manager.dart';
+import 'package:nodeflow/router.dart';
+
+import 'module/module.dart';
 
 class Nodeflow extends StatefulWidget {
-  const Nodeflow({Key? key}) : super(key: key);
+  final List<RouterPath> initialPath;
+  final List<ProjectModule> modules;
+
+  const Nodeflow({
+    Key? key,
+    required this.modules,
+    this.initialPath = const [KeyPath('dashboard')],
+  }) : super(key: key);
 
   @override
-  _NodeflowState createState() => _NodeflowState();
+  NodeflowState createState() => NodeflowState();
+
+  static NodeflowState of(BuildContext context) {
+    return StateData.of<NodeflowState>(context);
+  }
 }
 
-class _NodeflowState extends State<Nodeflow> {
-  final GoRouter _router = GoRouter(
-    routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => Editor(),
-        routes: [
-          GoRoute(
-            path: 'license',
-            builder: (context, state) => Container(),
-            routes: [
-              GoRoute(
-                path: 'activate',
-                builder: (context, state) => Container(),
-              ),
-            ],
-          ),
-          GoRoute(
-              path: 'project',
-              builder: (context, state) {
-                return Container();
-              },
-              routes: [
-                GoRoute(
-                  path: ':id',
-                  builder: (context, state) {
-                    return Container();
-                  },
-                )
-              ]),
-        ],
-      ),
-    ],
-  );
-
+class NodeflowState extends State<Nodeflow> {
   @override
   Widget build(BuildContext context) {
-    return CompactUI(mode: ThemeMode.dark, routerConfig: _router);
+    return StateData(
+      state: this,
+      child: DebugFocusHighlighter(
+        enabled: false,
+        child: ProjectManager(
+          directory: Directory('projects'),
+          modules: widget.modules,
+          child: AppSettings(
+            file: {},
+            child: RouterNavigator(
+              initialPaths: widget.initialPath,
+              child: CompactUI(
+                mode: ThemeMode.dark,
+                child: RouteBuilder(
+                  routes: {
+                    DefaultPathRequest: (path) => const RedirectRouterPage([KeyPath('dashboard')]),
+                    KeyPathRequest('dashboard'): (path) {
+                      return RouterPageBuilder((context) => const Dashboard());
+                    },
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -11,6 +11,13 @@ final Uint8List kTransparentImage = Uint8List.fromList(
   ],
 );
 
+const int _iconStart = 0xe000;
+const int _iconRange = 0xf4dd;
+IconData iconFromHashcode(int hash) {
+  int codePoint = _iconStart + (hash % (_iconRange - _iconStart));
+  return IconData(codePoint, fontFamily: 'MaterialIcons');
+}
+
 extension NotificationExtension on State {
   void fireEvent(Notification notification) {
     context.dispatchNotification(notification);

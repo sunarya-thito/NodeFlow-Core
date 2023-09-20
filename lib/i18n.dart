@@ -10,3 +10,9 @@ class I18n {
   /// Prevents instantiation and extension.
   const I18n._();
 }
+
+typedef I18nString = String Function(AppLocalizations i18n);
+
+extension I18nContext on BuildContext {
+  AppLocalizations get i18n => I18n.of(this);
+}

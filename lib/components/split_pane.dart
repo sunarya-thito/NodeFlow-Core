@@ -26,7 +26,19 @@ class SplitPaneController extends ChangeNotifier {
   double get position => _position;
   SplitPaneOrientation get orientation => _orientation;
   bool get resizable => _resizable;
-  bool get reverse => _reverse;
+  bool get reverse {
+    if (orientation == SplitPaneOrientation.horizontal) {
+      if (_attachedState != null) {
+        // Check for RTL
+        var directionality = Directionality.maybeOf(_attachedState!.context);
+        if (directionality == TextDirection.rtl) {
+          return !_reverse;
+        }
+      }
+      return _reverse;
+    }
+    return _reverse;
+  }
 
   void _attach(SplitPaneState state) {
     if (_attachedState != null) {

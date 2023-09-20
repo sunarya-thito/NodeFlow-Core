@@ -15,7 +15,7 @@ class NodeProviderCategory {
   NodeProviderCategory(this.name, this.description, [this.parent]);
 }
 
-abstract class NodeProvider {
+abstract class NodeProvider extends ChangeNotifier {
   final String id;
   final String name;
   final String description;
@@ -37,6 +37,8 @@ abstract class NodeProvider {
         name: name,
         position: position);
   }
+
+  void updateNode(Node node) {}
 
   Node parseNode(Map<String, dynamic> json) {
     return Node.fromJson(this, json);
@@ -89,6 +91,7 @@ abstract class NodeTitleProvider extends NodeParameterProvider {
       title: title,
       subTitle: subTitle,
       icon: icon,
+      parameter: parameter,
     );
   }
 }
@@ -153,7 +156,7 @@ enum PortBounds {
   none,
 }
 
-abstract class NodeParameterProvider {
+abstract class NodeParameterProvider extends ChangeNotifier {
   bool get growable;
   bool get hasInput => inputBounds != PortBounds.none;
   bool get hasOutput => outputBounds != PortBounds.none;

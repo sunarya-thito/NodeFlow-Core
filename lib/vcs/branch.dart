@@ -1,8 +1,9 @@
 import 'package:flutter/widgets.dart';
-import 'package:nodeflow/project.dart';
+
+import '../project/project_manager.dart';
 
 class Branch extends ChangeNotifier {
-  final Project project;
+  final ProjectSnapshot project;
   final String id;
   String _name;
 
